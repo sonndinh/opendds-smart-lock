@@ -84,25 +84,20 @@ fi
 echo "CMD: '$CMD', SECURITY: '$SECURITY', LOCK_ID: '$LOCK', SECURITY_ARGS: '$SECURITY_ARGS'"
 
 function update_certs {
-  APP_PASSWORD=$(cat ${BASE_PATH}/dpm_password)
-  APP_NONCE=${LOCK}
   API_URL=$(grep api_url ${smartlock_ini} | sed 's/api_url *= *"//; s/".*//')
   USERNAME=$(grep username ${smartlock_ini} | sed 's/username *= *"//; s/".*//')
+  PASSWORD=$(cat ${BASE_PATH}/dpm_password)
+  NONCE=${LOCK}
 
-  mkdir -p ${cert_dir}/id_ca ${cert_dir}/${LOCK} ${cert_dir}/perm_ca
+  if ! command -v rustc &> /dev/null
+  then
+    curl https://sh.rustup.rs -sSf | sh -s -- -y
+  fi
 
-  curl -c cookies.txt -H'Content-Type: application/json' -d"{\"username\":\"${USERNAME}\",\"password\":\"$APP_PASSWORD\"}" ${API_URL}/login
-
-  curl --silent -b cookies.txt "${API_URL}/applications/identity_ca.pem" > ${ID_CA}
-  curl --silent -b cookies.txt "${API_URL}/applications/permissions_ca.pem" > ${PERM_CA}
-  curl --silent -b cookies.txt "${API_URL}/applications/governance.xml.p7s" > ${PERM_GOV}
-  curl --silent -b cookies.txt "${API_URL}/applications/key_pair?nonce=${APP_NONCE}" > key-pair
-  curl --silent -b cookies.txt "${API_URL}/applications/permissions.xml.p7s?nonce=${APP_NONCE}" > ${PERM_PERMS}
-
-  jq -r '.public' key-pair > ${ID_CERT}
-  jq -r '.private' key-pair > ${ID_PKEY}
-
-  rm -f cookies.txt key-pair
+  cd certs_downloader
+  cargo build --release
+  cargo run $API_URL $USERNAME $PASSWORD $NONCE $cert_dir $LOCK id_ca perm_ca
+  cd ..
 }
 
 PID_FILE=${BASE_PATH}/smartlock.pid
@@ -162,4 +157,3 @@ case "$CMD" in
         exit 1
         ;;
 esac
-
